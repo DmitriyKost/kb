@@ -72,6 +72,7 @@ pub fn render_loop(target: &str) -> io::Result<()> {
     let mut stdout = io::stdout();
 
     set_raw_mode();
+    write!(stdout, "\x1b[?25l")?;
     render_status(&mut stdout, &target, &typed)?;
 
     let mut buf = [0u8; 1];
@@ -98,5 +99,6 @@ pub fn render_loop(target: &str) -> io::Result<()> {
     }
     unset_raw_mode();
     render_final(&mut stdout, &target, &typed)?;
+    write!(stdout, "\x1b[?25h")?;
     Ok(())
 }

@@ -11,14 +11,14 @@ const LF: u8 = b'\n';
 fn set_raw_mode() {
     let _ = Command::new("sh")
         .arg("-c")
-        .arg("stty raw -echo < /dev/tty")
+        .arg("stty -icanon -echo min 1 time 0 < /dev/tty")
         .status();
 }
 
 fn unset_raw_mode() {
     let _ = Command::new("sh")
         .arg("-c")
-        .arg("stty -raw echo < /dev/tty")
+        .arg("stty icanon echo < /dev/tty")
         .status();
 }
 

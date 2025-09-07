@@ -22,20 +22,6 @@ fn unset_raw_mode() {
         .status();
 }
 
-// fn set_raw_mode() {
-//     let _ = Command::new("sh")
-//         .arg("-c")
-//         .arg("stty -icanon -echo min 1 time 0 < /dev/tty")
-//         .status();
-// }
-//
-// fn unset_raw_mode() {
-//     let _ = Command::new("sh")
-//         .arg("-c")
-//         .arg("stty icanon echo < /dev/tty")
-//         .status();
-// }
-
 fn render_status<W: Write>(out: &mut W, target: &[char], typed: &[char]) -> io::Result<()> {
     write!(out, "\x1b[1B\x1b[2K")?;
     for (i, &ch) in target.iter().enumerate() {

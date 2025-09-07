@@ -23,7 +23,7 @@ fn unset_raw_mode() {
 }
 
 fn render_status<W: Write>(out: &mut W, target: &[char], typed: &[char]) -> io::Result<()> {
-    write!(out, "\x1b[1B\x1b[2K")?;
+    write!(out, "\x1b[2K")?;
     for (i, &ch) in target.iter().enumerate() {
         if i < typed.len() {
             if typed[i] == ch {
@@ -41,7 +41,7 @@ fn render_status<W: Write>(out: &mut W, target: &[char], typed: &[char]) -> io::
             write!(out, "\x1b[2m{}\x1b[0m", ch)?;
         }
     }
-    write!(out, "\x1b[1A\r")?;
+    write!(out, "\r")?;
     out.flush()
 }
 

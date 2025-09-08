@@ -1,5 +1,6 @@
 use std::io::{self, Read, Write};
 use std::process::Command;
+use std::sync::OnceLock;
 
 const CTRL_C: u8 = 3;
 const ESC: u8 = 27;
@@ -8,7 +9,21 @@ const DELETE: u8 = 127;
 const CR: u8 = b'\r';
 const LF: u8 = b'\n';
 
+static ORIGINAL_TTY: OnceLock<String> = OnceLock::new();
+
 fn set_raw_mode() {
+    if ORIGINAL_TTY.get().is_none() {
+        if let Ok(output) = Command::new("sh")
+            .arg("-c")
+            .arg("stty -g < /dev/tty")
+            .output()
+        {
+            if let Ok(state) = String::from_utf8(output.stdout) {
+                let _ = ORIGINAL_TTY.set(state.trim().to_string());
+            }
+        }
+    }
+
     let _ = Command::new("sh")
         .arg("-c")
         .arg("stty raw -echo < /dev/tty")
@@ -16,10 +31,15 @@ fn set_raw_mode() {
 }
 
 fn unset_raw_mode() {
-    let _ = Command::new("sh")
-        .arg("-c")
-        .arg("stty -raw echo < /dev/tty")
-        .status();
+    if let Some(state) = ORIGINAL_TTY.get() {
+        let cmd = format!("stty {} < /dev/tty", state);
+        let _ = Command::new("sh").arg("-c").arg(&cmd).status();
+    } else {
+        let _ = Command::new("sh")
+            .arg("-c")
+            .arg("stty sane < /dev/tty")
+            .status();
+    }
 }
 
 fn render_status<W: Write>(out: &mut W, target: &[char], typed: &[char]) -> io::Result<()> {

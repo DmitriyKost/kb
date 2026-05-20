@@ -11,17 +11,35 @@ const LF: u8 = b'\n';
 
 static ORIGINAL_TTY: OnceLock<String> = OnceLock::new();
 
+struct TerminalGuard;
+
+impl TerminalGuard {
+    fn activate<W: Write>(out: &mut W) -> io::Result<Self> {
+        set_raw_mode();
+        write!(out, "\x1b[?25l")?;
+        out.flush()?;
+        Ok(Self)
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        unset_raw_mode();
+        let mut stdout = io::stdout();
+        let _ = write!(stdout, "\r\x1b[?25h");
+        let _ = stdout.flush();
+    }
+}
+
 fn set_raw_mode() {
-    if ORIGINAL_TTY.get().is_none() {
-        if let Ok(output) = Command::new("sh")
+    if ORIGINAL_TTY.get().is_none()
+        && let Ok(output) = Command::new("sh")
             .arg("-c")
             .arg("stty -g < /dev/tty")
             .output()
-        {
-            if let Ok(state) = String::from_utf8(output.stdout) {
-                let _ = ORIGINAL_TTY.set(state.trim().to_string());
-            }
-        }
+        && let Ok(state) = String::from_utf8(output.stdout)
+    {
+        let _ = ORIGINAL_TTY.set(state.trim().to_string());
     }
 
     let _ = Command::new("sh")
@@ -42,45 +60,39 @@ fn unset_raw_mode() {
     }
 }
 
-fn render_status<W: Write>(out: &mut W, target: &[char], typed: &[char]) -> io::Result<()> {
+fn render_line<W: Write>(
+    out: &mut W,
+    target: &[char],
+    typed: &[char],
+    highlight_cursor: bool,
+) -> io::Result<()> {
     write!(out, "\x1b[2K")?;
     for (i, &ch) in target.iter().enumerate() {
         if i < typed.len() {
             if typed[i] == ch {
                 write!(out, "\x1b[32m{}\x1b[0m", ch)?;
+            } else if ch == ' ' {
+                write!(out, "\x1b[31m_\x1b[0m")?;
             } else {
-                if ch == ' ' {
-                    write!(out, "\x1b[31m_\x1b[0m")?;
-                } else {
-                    write!(out, "\x1b[31m{}\x1b[0m", ch)?;
-                }
+                write!(out, "\x1b[31m{}\x1b[0m", ch)?;
             }
-        } else if i == typed.len() {
+        } else if highlight_cursor && i == typed.len() {
             write!(out, "\x1b[7m{}\x1b[0m", ch)?;
         } else {
             write!(out, "\x1b[2m{}\x1b[0m", ch)?;
         }
     }
+    Ok(())
+}
+
+fn render_status<W: Write>(out: &mut W, target: &[char], typed: &[char]) -> io::Result<()> {
+    render_line(out, target, typed, true)?;
     write!(out, "\r")?;
     out.flush()
 }
 
 fn render_final<W: Write>(out: &mut W, target: &[char], typed: &[char]) -> io::Result<()> {
-    for (i, &ch) in target.iter().enumerate() {
-        if i < typed.len() {
-            if typed[i] == ch {
-                write!(out, "\x1b[32m{}\x1b[0m", ch)?;
-            } else {
-                if ch == ' ' {
-                    write!(out, "\x1b[31m_\x1b[0m")?;
-                } else {
-                    write!(out, "\x1b[31m{}\x1b[0m", ch)?;
-                }
-            }
-        } else {
-            write!(out, "\x1b[2m{}\x1b[0m", ch)?;
-        }
-    }
+    render_line(out, target, typed, false)?;
     writeln!(out)?;
     out.flush()
 }
@@ -91,8 +103,7 @@ pub fn render_loop(target: &str) -> io::Result<()> {
     let mut stdin = io::stdin();
     let mut stdout = io::stdout();
 
-    set_raw_mode();
-    write!(stdout, "\x1b[?25l")?;
+    let _guard = TerminalGuard::activate(&mut stdout)?;
     render_status(&mut stdout, &target, &typed)?;
 
     let mut buf = [0u8; 1];
@@ -117,8 +128,6 @@ pub fn render_loop(target: &str) -> io::Result<()> {
             break;
         }
     }
-    unset_raw_mode();
     render_final(&mut stdout, &target, &typed)?;
-    write!(stdout, "\x1b[?25h")?;
     Ok(())
 }

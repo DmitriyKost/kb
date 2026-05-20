@@ -8,13 +8,11 @@ mod texts;
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().skip(1).collect();
-    let word_list = match args.get(0).map(|s| s.as_str()) {
+    let word_list = match args.first().map(String::as_str) {
         None => WordList::Casual,
         Some(s) => s.parse().unwrap_or_else(|_| {
-            eprintln!(
-                "Usage: {} [dev|casual|music|chatting]",
-                env::args().next().unwrap()
-            );
+            let bin_name = env::args().next().unwrap_or_else(|| "kb".to_string());
+            eprintln!("Usage: {} [dev|casual|music|chatting]", bin_name);
             process::exit(1);
         }),
     };

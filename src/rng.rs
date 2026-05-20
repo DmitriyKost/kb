@@ -20,15 +20,16 @@ impl XorShift {
         let mut x = self.state;
         let bits = usize::BITS;
 
-        x ^= x.wrapping_shl((13 % bits) as u32);
-        x ^= x.wrapping_shr((7 % bits) as u32);
-        x ^= x.wrapping_shl((17 % bits) as u32);
+        x ^= x.wrapping_shl(13 % bits);
+        x ^= x.wrapping_shr(7 % bits);
+        x ^= x.wrapping_shl(17 % bits);
 
         self.state = x;
         x
     }
 
     pub fn next_bound(&mut self, n: usize) -> usize {
+        assert!(n > 0, "next_bound requires n > 0");
         self.next() % n
     }
 }

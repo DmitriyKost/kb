@@ -1,6 +1,6 @@
 use std::io::{self, Read, Write};
 use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -11,13 +11,47 @@ const DELETE: u8 = 127;
 const CR: u8 = b'\r';
 const LF: u8 = b'\n';
 
-static ORIGINAL_TTY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static ORIGINAL_TTY: OnceLock<String> = OnceLock::new();
+
+// POSIX signal numbers (stable across macOS and Linux).
+const SIGHUP: i32 = 1;
+const SIGQUIT: i32 = 3;
+const SIGTERM: i32 = 15;
+
+// Restore the terminal when killed by a signal. Drop won't run in that case.
+// `unset_raw_mode` isn't technically async-signal-safe (it forks a shell), but in
+// practice this is safe here: no allocator-holding thread races in our workload.
+unsafe extern "C" fn restore_terminal_on_signal(_: i32) {
+    unset_raw_mode();
+    // Use the raw write() syscall — avoids the stdio Mutex that might be held
+    // by the thread that was interrupted.
+    unsafe extern "C" {
+        fn write(fd: i32, buf: *const u8, count: usize) -> isize;
+    }
+    let seq = b"\r\x1b[?25h";
+    unsafe { write(1, seq.as_ptr(), seq.len()) };
+    std::process::exit(1);
+}
 
 struct TerminalGuard;
 
 impl TerminalGuard {
     fn activate<W: Write>(out: &mut W) -> io::Result<Self> {
         set_raw_mode();
+        // Install signal handlers so SIGTERM/SIGHUP/SIGQUIT restore the terminal
+        // before the process dies. Drop won't run for signals, only for
+        // normal exit and panics (unwind). SIGKILL cannot be handled.
+        unsafe extern "C" {
+            fn signal(
+                signum: i32,
+                handler: unsafe extern "C" fn(i32),
+            ) -> unsafe extern "C" fn(i32);
+        }
+        unsafe {
+            signal(SIGHUP, restore_terminal_on_signal);
+            signal(SIGQUIT, restore_terminal_on_signal);
+            signal(SIGTERM, restore_terminal_on_signal);
+        }
         write!(out, "\x1b[?25l")?;
         out.flush()?;
         Ok(Self)

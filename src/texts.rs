@@ -49,13 +49,18 @@ pub fn get_target_word_list(list: WordList) -> io::Result<String> {
         return Err(io::Error::other("word list is empty"));
     }
 
+    let mut attempts = 0;
     while buff.len() < target_width {
         let next_word = words[rng.next_bound(words.len())];
         if buff.len() + next_word.len() < target_width {
             buff.push_str(next_word);
             buff.push(' ');
+            attempts = 0;
         } else {
-            break;
+            attempts += 1;
+            if attempts >= words.len() {
+                break;
+            }
         }
     }
     if buff.ends_with(' ') {

@@ -30,6 +30,14 @@ impl XorShift {
 
     pub fn next_bound(&mut self, n: usize) -> usize {
         assert!(n > 0, "next_bound requires n > 0");
-        self.next() % n
+        // Rejection sampling: discard values in the biased remainder region so
+        // every bucket [0, n) is equally likely.
+        let threshold = usize::MAX - (usize::MAX % n);
+        loop {
+            let x = self.next();
+            if x <= threshold {
+                return x % n;
+            }
+        }
     }
 }
